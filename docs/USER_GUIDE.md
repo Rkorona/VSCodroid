@@ -1019,7 +1019,7 @@ itself:
 - a script under the app's storage run by its own path: Android refuses the script file itself, before its `#!` line is ever read. Run it as `ruby script.rb` instead
 
 In a terminal, in a shell task, and in whatever a process task's command starts,
-all three work.
+an absolute path, a forked helper and a script run by its own path all work.
 
 `npm` and `npx` are bash functions and nothing else, so those two are still
 reachable only from bash. `sh -c 'npm -v'` fails where `bash -c 'npm -v'` works.
