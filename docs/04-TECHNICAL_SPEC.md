@@ -367,6 +367,9 @@ val env = mapOf(
     "TMUX_TMPDIR"             to "${cacheDir}/tmp",   // Termux tmux hunts inside Termux's prefix otherwise
     "PATH"                    to "${nativeLibDir}:${filesDir}/usr/libexec/tcbin:${filesDir}/usr/bin:<toolchains>:/system/bin",
     "LD_LIBRARY_PATH"         to "${nativeLibDir}:${filesDir}/usr/lib",
+    "TERMUX_APP__DATA_DIR"    to "<applicationInfo.dataDir>",  // these three are read only by the exec
+    "TERMUX_APP__LEGACY_DATA_DIR" to "/data/data/<package>",   // interceptor a terminal preloads (end of
+    "TERMUX__PREFIX"          to "${filesDir}/usr",            // this section), and inert until then
     "NODE_PATH"               to "${filesDir}/server/vscode-reh/node_modules",
     "NODE_OPTIONS"            to "--require=${filesDir}/server/platform-fix.js",
     "SHELL"                   to "${filesDir}/usr/bin/bash",
@@ -393,6 +396,8 @@ val env = mapOf(
                                                                        // when the bundle exists: requests treats
                                                                        // one it cannot open as fatal
     "SSL_CERT_DIR"            to "<system trust store>",
+    "OPENSSL_CONF"            to "${filesDir}/usr/etc/tls/openssl.cnf",  // libcrypto's built-in path is Termux's,
+                                                                         // and EACCES there is fatal to Node
     "NPM_CONFIG_PREFIX"       to "${filesDir}/usr",
     "NPM_CONFIG_CACHE"        to "${cacheDir}/npm-cache",
     "PIP_CACHE_DIR"           to "${cacheDir}/pip",
