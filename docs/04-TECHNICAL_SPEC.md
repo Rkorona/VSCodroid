@@ -489,12 +489,14 @@ environment (`Environment.buildProcessEnvironment`), where they are inert until 
 appears; `LD_PRELOAD` itself is deliberately not there, because anything the extension host spawns
 without a pty is outside the measured scope. `"LD_PRELOAD": null` in the same setting is the off
 switch, and the launch-time insert leaves a present key alone whatever its value. The git
-extension's credential hand-off in terminals is unchanged by the preload: `GIT_ASKPASS` names
-`extensions/git/dist/askpass.sh`, which is extracted at mode 0600, and the interceptor refuses any
-file that fails `access(X_OK)` before it intercepts, so `git` falls back to its own terminal prompt
-as it does without the preload. An executable copy of that script would route every HTTPS credential
-prompt in a preloaded terminal to the workbench's input boxes instead (measured with such a copy on
-API 33 and 36 emulators, 2026-09-23), so the file's mode is load-bearing.
+extension's helpers are unchanged by the preload. `GIT_ASKPASS`, `SSH_ASKPASS` and `GIT_EDITOR`
+name scripts in `extensions/git/dist`, and each of those names is a link onto
+`libexec-trampoline.so`, which runs the shipped script, kept beside it as `<name>.script`, with
+`/system/bin/sh` (`ToolchainManager.addGitHelperRows`). The link resolves outside the data
+directory, so the interceptor lets that exec through as it is rather than starting it through the
+linker (P2 in `scripts/termux-exec.patch`), and a credential prompt from `git` in a terminal
+reaches the workbench's sign-in and input boxes with or without the preload. Read from the code,
+not measured with the preload.
 
 ---
 
