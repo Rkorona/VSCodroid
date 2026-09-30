@@ -95,6 +95,12 @@ object Environment {
         // without the variable every session dies with "no suitable socket path".
         val tmpDir = "$cacheDir/tmp"
 
+        // The kernel's spelling of the data directory, for the exec interceptor's
+        // legacy row below. Lint's SdCardPath points at getFilesDir(), which gives
+        // the other spelling; no API returns this one, so the literal is the value.
+        @Suppress("SdCardPath")
+        val legacyDataDir = "/data/data/${context.packageName}"
+
         val base = mapOf(
             "HOME" to homeDir,
             "TMPDIR" to tmpDir,
@@ -122,10 +128,11 @@ object Environment {
             // the interception has been measured; from this map it would load
             // under node itself and everything node forks, which has not.
             // ExecPreloadEnvTest pins that absence.
-            // The fallback is the value every device reports; JVM fixtures built
-            // from a bare ApplicationInfo() may leave dataDir unset.
-            "TERMUX_APP__DATA_DIR" to (context.applicationInfo.dataDir ?: "/data/user/0/${context.packageName}"),
-            "TERMUX_APP__LEGACY_DATA_DIR" to "/data/data/${context.packageName}",
+            // The fallback is filesDir's parent, the same directory on a device;
+            // JVM fixtures built from a bare ApplicationInfo() may leave dataDir
+            // unset.
+            "TERMUX_APP__DATA_DIR" to (context.applicationInfo.dataDir ?: File(filesDir).parent),
+            "TERMUX_APP__LEGACY_DATA_DIR" to legacyDataDir,
             "TERMUX__PREFIX" to "$filesDir/usr",
             "NODE_PATH" to "$filesDir/server/vscode-reh/node_modules",
             "NODE_OPTIONS" to nodeOptions,
