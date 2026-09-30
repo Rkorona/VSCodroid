@@ -447,7 +447,7 @@ with no section naming the version a user installed.
       uid=$(adb shell pm list packages -U com.vscodroid |
         sed -n 's/^package:com\.vscodroid uid://p')
       adb logcat -d --uid="$uid" | grep -v FeatureFlagsImplExport | grep -E \
-        -e 'FATAL EXCEPTION|Launch-time refresh of' \
+        -e 'FATAL EXCEPTION|(Launch|Resume)-time refresh of' \
         -e 'NoClassDefFoundError|ClassNotFoundException|AbstractMethodError' \
         -e 'NoSuchMethodError|NoSuchFieldError|AndroidBridge.*not a function'
       --uid keeps other apps out: an API 33 image logs these errors from its
