@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeFalse
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -1290,14 +1291,17 @@ class ProcessManagerTest {
 
     @Test
     fun `reads the token when the server becomes ready, and hands it out only while it is`() {
+        // The file changes before the first ask, as a rotation changes it: a getter
+        // that read the file on first use, or on every use, would hand out what it
+        // holds now, which after a rotation is the next server's token, to whatever
+        // holds the port before that server is ready.
         val token = writeTokenFile("first")
         becomeReady()
-        assertEquals("first", manager.connectionToken)
-
         token.writeText("second")
         assertEquals(
             "first", manager.connectionToken,
-            "the token must be cached; the workbench asks for it on every intercepted request"
+            "the token must be the one read when readiness was recorded, not the one " +
+                "the file holds when it is asked for",
         )
 
         manager.stopServer()
@@ -1311,6 +1315,44 @@ class ProcessManagerTest {
         assertEquals(
             "second", manager.connectionToken,
             "the next readiness must read the token its own server holds",
+        )
+    }
+
+    @Test
+    fun `a probe that lost to a clear leaves the ready server's token alone`() {
+        // Kills: storing the token ahead of the epoch check. A probe of the previous
+        // spawn can hold what it read across a whole restart: the clear, the
+        // rotation and the next server's readiness can all land between its read and
+        // its lock. Stored on its way out, even by a probe that then loses, that
+        // value replaces the token of the server that is ready with one no server
+        // accepts, and every page load is "Forbidden." until the next restart.
+        //
+        // Staged from the lookup of the token's path, which runs between the probe's
+        // request and its lock, so the interleaving is a statement rather than a
+        // race. The next server's probe is stood in for by the two writes it makes,
+        // as in `a probe that lost to a clear does not withdraw a later probe's answer`.
+        val stale = File(tempDir, "stale-token").apply { writeText("previous-server") }
+        var staged = false
+        every { Environment.getConnectionTokenPath(any()) } answers {
+            staged = true
+            manager.stopServer()
+            manager.cachedTokenField = "next-server"
+            manager.readyField = true
+            stale.path
+        }
+        val server = StubServer(200)
+        val recorded = try {
+            manager.portField = server.port
+            manager.probeReadiness()
+        } finally {
+            server.stop()
+        }
+
+        assertTrue(staged, "the probe no longer reads the token, so no restart was staged inside it")
+        assertFalse(recorded, "a probe that lost to a clear must say so")
+        assertEquals(
+            "next-server", manager.connectionToken,
+            "the losing probe stored the token it read over the one the ready server holds",
         )
     }
 
@@ -1382,6 +1424,11 @@ private val ProcessManager.isShuttingDownField: Boolean
 private var ProcessManager.readyField: Boolean
     get() = field("_isReady").getBoolean(this)
     set(value) = field("_isReady").setBoolean(this, value)
+
+/** Reaches `ProcessManager.cachedToken`, which is private production state. */
+private var ProcessManager.cachedTokenField: String?
+    get() = field("cachedToken").get(this) as String?
+    set(value) = field("cachedToken").set(this, value)
 
 /** Reaches [ProcessManager._port], which is private production state. */
 private var ProcessManager.portField: Int
@@ -2465,6 +2512,53 @@ class AdoptionTest {
 
         assertEquals("keep me", victim.readText(), "the rotation wrote into the file a link pointed at")
         assertFalse(Files.isSymbolicLink(tokenPath), "the link must go, so the server mints a token of its own")
+    }
+
+    @Test
+    fun `a token file that cannot be rewritten is removed rather than kept`() {
+        // Kills: keeping the file when the rewrite fails. The server reuses any token
+        // it finds there, so a file the app cannot open for writing (its write bit
+        // cleared from a terminal, which runs as the app) would carry the token the
+        // port holder may have been sent across every spawn.
+        val tokenPath = File(tempDir, "token").toPath()
+        Files.setPosixFilePermissions(tokenPath, PosixFilePermissions.fromString("r--------"))
+        assumeFalse(Files.isWritable(tokenPath), "root writes through the mode, so the rewrite cannot fail")
+
+        spawnOverStranger()
+
+        assertFalse(
+            tokenPath.toFile().exists(),
+            "the old token outlived a spawn because its file could not be rewritten",
+        )
+    }
+
+    @Test
+    fun `the token is replaced before the server is spawned`() {
+        // Kills: moving the rotation below the spawn. The server reads the file once,
+        // as it builds its server object, and keeps that token for its lifetime, so a
+        // rotation that can land after that read leaves it holding the old token
+        // while the probe caches the new one, and every page load is refused. The
+        // environment is built on the way to the spawn, so the file as it stands
+        // then is what a process started there would read. It stands in for the
+        // spawn rather than being it: a rotation moved between the two also fails
+        // here, though it would still land first.
+        val tokenFile = File(tempDir, "token")
+        var atSpawn: String? = null
+        every { Environment.buildProcessEnvironment(any(), any()) } answers {
+            atSpawn = tokenFile.readText()
+            emptyMap()
+        }
+
+        spawnOverStranger()
+
+        assertNotEquals(
+            token, atSpawn,
+            "the file still held the old token when the spawn's environment was built",
+        )
+        assertEquals(
+            tokenFile.readText(), atSpawn,
+            "the file changed again after the spawn's environment was built",
+        )
     }
 
     @Test

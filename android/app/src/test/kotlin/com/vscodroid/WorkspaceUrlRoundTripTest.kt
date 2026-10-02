@@ -424,6 +424,14 @@ class WorkspaceUrlRoundTripTest {
      * page holds names a server a restart may have replaced, and a closed-folder
      * URL loaded verbatim is then answered "Forbidden.". [workbenchUrl] spells the
      * closed state with the token, and `navigateToFolder` is the route to it.
+     *
+     * `reload()` is that verbatim load too, and the tempting one: it is how the
+     * resume path keeps `?ew=true`. `onServerReady` puts the editor back through
+     * this method after a spawn, and every spawn replaced the token, so a reload
+     * is refused anywhere in it: a guard clause in front of the closed-folder
+     * branch is the same reload as a path inside it. The builder is looked for in
+     * that branch itself, because kept beside a reload for one caller or the
+     * other it would still be in the method.
      */
     @Test
     fun `a closed folder is reloaded with the live token, not the cookie`() {
@@ -433,10 +441,16 @@ class WorkspaceUrlRoundTripTest {
                 "private fun loadVSCode(",
             ),
         )
+        val closed = SourceScan.body(load, "if (emptyWindowUrl(")
 
-        assertTrue(load.contains("navigateToFolder(port, null)")) {
+        assertTrue(closed.contains("navigateToFolder(port, null)")) {
             "loadVSCode no longer restores the closed folder through the one builder " +
                 "that carries the token"
+        }
+        assertFalse(load.contains("reload(")) {
+            "loadVSCode reloads the page verbatim again, on at least one path, so a " +
+                "closed folder restored after a server restart is sent with the previous " +
+                "server's cookie and answered Forbidden"
         }
         assertFalse(load.contains(".loadUrl(")) {
             "loadVSCode loads a URL itself again, so a closed folder restored after a " +

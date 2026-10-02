@@ -1628,6 +1628,18 @@ class VSCodroidWebViewClient(
             // permission. Forwarding anyway let whatever held it serve bytes into
             // the webview frames [isOurOrigin] trusts, `pre/index.html` among them,
             // so nothing goes to the port until there is a token to send with it.
+            //
+            // The cost, accepted rather than overlooked: readiness is also
+            // withdrawn for the seconds it takes to adopt back a server that
+            // outlived its bootstrap, while the page stays connected to it. A
+            // webview opened or re-shown in that window gets this 503 and stays
+            // blank until it is shown again after that window, or closed and
+            // reopened if it keeps its content while hidden: the workbench drops
+            // the frame of a hidden webview and builds a new one when it is shown,
+            // unless the webview was opened with `retainContextWhenHidden`.
+            // `onServerReady` does not reload a page whose server was adopted
+            // back, on purpose: reloading the workbench to repair one webview
+            // would cost the open editor that adoption exists to keep.
             if (token.isNullOrEmpty()) {
                 Logger.d(TAG, "CDN request not forwarded, the local server is not ready: $host${uri.path}")
                 return WebResourceResponse(

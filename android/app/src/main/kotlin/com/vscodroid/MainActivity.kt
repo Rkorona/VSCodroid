@@ -2378,7 +2378,9 @@ class MainActivity : AppCompatActivity() {
                 } else if (sameServer && isWorkbenchUrl(webView?.url, port)) {
                     // Only the bootstrap died, and the page is still connected to
                     // the editor server that was adopted back. A reload would
-                    // restart the extension host for nothing.
+                    // restart the extension host to repair at most a webview opened
+                    // while readiness was withdrawn: see the 503 in
+                    // VSCodroidWebViewClient.interceptCdnRequest.
                     Logger.i(tag, "Adopted the server the page is connected to; not reloading")
                 } else {
                     loadVSCode(port)

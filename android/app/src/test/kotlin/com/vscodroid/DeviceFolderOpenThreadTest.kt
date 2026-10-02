@@ -236,44 +236,42 @@ class DeviceFolderOpenThreadTest {
     }
 
     /**
-     * The fifth read, and the one that fired on every launch rather than only on
-     * a launch that reopens a device folder.
+     * Where the cold start takes the connection token: once, inside the hop it
+     * already makes, handed to `navigateToFolder`, which uses it rather than
+     * asking again.
      *
-     * `ProcessManager.connectionToken` used to read the token file on its first
-     * call, and the first caller of every run was the navigation, on the main
-     * thread, at the moment the workbench URL is assembled. The file is now read
-     * by the readiness probe on `Dispatchers.IO` and the getter is a field read,
-     * so this pins the shape that kept the disk off the main thread while it was
-     * one, and costs nothing now: the cold start resolves the token inside the hop
-     * it already makes, and `navigateToFolder` does not resolve it again itself.
+     * This was the fifth main-thread read while `ProcessManager.connectionToken`
+     * read the token file on its first call, because the first caller of every
+     * run was this navigation. The readiness probe reads the file now, on
+     * `Dispatchers.IO`, and the getter is a field read, which `ProcessManagerTest`
+     * pins at its source. So a failure here is a change of shape, not a disk read
+     * on the main thread: if the move is deliberate, this case follows it.
      */
     @Test
-    fun `the connection token is read off the main thread on the cold start path`() {
+    fun `the cold start takes the connection token once, inside its hop`() {
         val load = code(body("loadVSCode"))
         val hop = load.indexOfFirst { it.contains("withContext(") && it.contains("Dispatchers.IO") }
         val read = load.indexOfFirst { it.contains("getConnectionToken()") }
 
         assertTrue(hop >= 0) { "loadVSCode no longer hops; this case is measuring nothing" }
         assertTrue(read >= 0) {
-            "loadVSCode no longer resolves the connection token, so the navigation is " +
-                "back to reading it on the main thread wherever it does resolve it"
+            "loadVSCode no longer takes the connection token itself, so the cold start " +
+                "navigates with whatever navigateToFolder's default reads after the hop"
         }
         assertTrue(read > hop) {
-            "the connection token is read before the hop, which is the main thread: a " +
-                "stat and a read of the token file on every cold launch, in the moment " +
-                "the workbench URL is built"
+            "loadVSCode takes the connection token before its hop rather than inside it, " +
+                "beside the folder it resolves there"
         }
 
-        // And the site it came from does not read it again. A parameter with a
-        // default that reads the token is what keeps every other caller working,
-        // and it is also how the main-thread read comes back: leaving a read in
-        // the body means the value passed in is computed and then ignored.
+        // And the site it is handed to does not ask again. Its parameter default is
+        // where a caller that hands in nothing gets one, so a read in the body
+        // either replaces the value handed in or repeats that default.
         val navigate = code(body("navigateToFolder"))
         assertEquals(
             emptyList<String>(),
             navigate.filter { it.contains("getConnectionToken()") }.map { it.trim() },
-            "navigateToFolder resolves the token itself again, so the caller that " +
-                "resolved it off the main thread bought nothing",
+            "navigateToFolder asks for the token in its body as well, which either " +
+                "replaces the value its caller hands in or repeats its own default",
         )
     }
 
