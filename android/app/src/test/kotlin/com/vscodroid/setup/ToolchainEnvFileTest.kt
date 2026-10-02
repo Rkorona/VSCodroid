@@ -293,21 +293,21 @@ class ToolchainEnvFileTest {
         )
     }
 
+    private val jdk = "usr/lib/jvm/java-17-openjdk"
+
+    /** What the jshell wrapper hands the loader ahead of the caller's arguments. */
+    private val jshell = "</p/../$jdk/bin/jshell><-J-Djdk.lang.Process.launchMechanism=VFORK>" +
+        "<-J-Duser.home=/h o/me>"
+
     /**
-     * `jshell` is the one wrapper that adds arguments, and they are what make it
-     * start at all: its default engine launches a second JVM by absolute path,
-     * which cannot be exec'd from filesDir, so the wrapper selects the local
-     * engine unless the caller chose one. jshell refuses `--execution` given
-     * twice and accepts abbreviations of it, so the guard is asserted in all
-     * three spellings. The file is sourced by a real bash with the loader
-     * replaced by a function that prints its arguments, which also holds the
-     * quoting of a `$HOME` with a space in it. `java` is the control: the special
-     * case must not leak into the ordinary wrapper beside it.
+     * Writes the env file for a Java toolchain holding `java` and `jshell`,
+     * sources it in a real bash with the loader replaced by a function that
+     * prints its arguments, runs [commands] there and returns what they printed.
+     * Anything the file prints while it is sourced, a syntax error included,
+     * lands in the same output.
      */
-    @Test
-    fun `jshell runs its snippets in its own JVM`() {
+    private fun runJavaWrappers(commands: String): List<String> {
         assumeTrue(File("/bin/bash").canExecute(), "no /bin/bash on this host")
-        val jdk = "usr/lib/jvm/java-17-openjdk"
         elf("$jdk/bin/java")
         elf("$jdk/bin/jshell")
         stateFile.writeText(
@@ -322,8 +322,7 @@ class ToolchainEnvFileTest {
         val builder = ProcessBuilder(
             "/bin/bash", "-c",
             """argv() { printf '<%s>' "${'$'}@"; echo; }; PREFIX=/p; HOME='/h o/me'; """ +
-                """. "${'$'}1"; jshell; jshell a 'b c'; jshell --execution jdi; """ +
-                """jshell --exec=jdi; jshell -execution jdi; java -version""",
+                """. "${'$'}1"; $commands""",
             "bash", sourced.path,
         ).redirectErrorStream(true)
         builder.environment().apply {
@@ -334,9 +333,26 @@ class ToolchainEnvFileTest {
         val process = builder.start()
         val out = process.inputStream.bufferedReader().readText()
         assertTrue(process.waitFor(30, TimeUnit.SECONDS), "bash did not finish")
+        return out.lines().filter { it.isNotEmpty() }
+    }
 
-        val jshell = "</p/../$jdk/bin/jshell><-J-Djdk.lang.Process.launchMechanism=VFORK>" +
-            "<-J-Duser.home=/h o/me>"
+    /**
+     * `jshell` is the one wrapper that adds arguments, and they are what make it
+     * start at all: its default engine launches a second JVM by absolute path,
+     * which cannot be exec'd from filesDir, so the wrapper selects the local
+     * engine unless the caller chose one. jshell refuses `--execution` given
+     * twice and accepts abbreviations of it, so the guard is asserted in all
+     * three spellings. The `$HOME` with a space in it holds the quoting. `java`
+     * is the control: the special case must not leak into the ordinary wrapper
+     * beside it.
+     */
+    @Test
+    fun `jshell runs its snippets in its own JVM`() {
+        val out = runJavaWrappers(
+            """jshell; jshell a 'b c'; jshell --execution jdi; """ +
+                """jshell --exec=jdi; jshell -execution jdi; java -version"""
+        )
+
         assertEquals(
             listOf(
                 "$jshell<--execution><local>",
@@ -346,9 +362,75 @@ class ToolchainEnvFileTest {
                 "$jshell<-execution><jdi>",
                 "</p/../$jdk/bin/java><-version>",
             ),
-            out.lines().filter { it.isNotEmpty() },
+            out,
             "the jshell wrapper no longer selects the local engine exactly once, so " +
                 "jshell fails to launch or refuses its arguments:\n" + envFile.readText(),
+        )
+    }
+
+    /**
+     * The engine guard looks at each argument on its own, never at the joined
+     * command line. A search of `" $* "` for `" -ex"` failed both ways. A value
+     * holding a space before `-ex`, as these two paths do, read as an engine
+     * choice, so jshell got its default engine back and failed to launch it.
+     * And `"$*"` joins with the first character of IFS, so under the IFS a
+     * script in strict mode sets, or an empty one, a later `--execution` had
+     * no space before it, went unseen, and jshell refused the option given
+     * twice. The third line is the control in the other direction: `-ex`
+     * inside an argument, rather than at its start, is not an engine choice.
+     */
+    @Test
+    fun `jshell judges each argument on its own, whatever IFS holds`() {
+        val out = runJavaWrappers(
+            """jshell --startup 'My -experiments/a.jsh'; """ +
+                """jshell --class-path 'build/lib -extra/x.jar'; """ +
+                """jshell -R-Dexample=1 -C-Xlint:-exports my-example.jsh; """ +
+                """IFS=${'$'}'\n\t'; jshell -v --execution jdi; """ +
+                """IFS=; jshell -q --exec=jdi x.jsh"""
+        )
+
+        assertEquals(
+            listOf(
+                "$jshell<--execution><local><--startup><My -experiments/a.jsh>",
+                "$jshell<--execution><local><--class-path><build/lib -extra/x.jar>",
+                "$jshell<--execution><local><-R-Dexample=1><-C-Xlint:-exports><my-example.jsh>",
+                "$jshell<-v><--execution><jdi>",
+                "$jshell<-q><--exec=jdi><x.jsh>",
+            ),
+            out,
+            "the jshell wrapper read its arguments as one string, so a path holding " +
+                "' -ex' lost the local engine or a non-default IFS passed --execution " +
+                "twice:\n" + envFile.readText(),
+        )
+    }
+
+    /**
+     * The guard keeps nothing from one call to the next. The function is sourced
+     * into every bash, scripts included, so a flag that outlived its call would
+     * let one `jshell --execution jdi` take the local engine away from every
+     * later `jshell` in that shell, and a global `arg` would overwrite the
+     * caller's own. `set -u` is what a strict-mode script runs under, and there
+     * a flag declared without a value is unbound and ends the script. That last
+     * one shows only where bash leaves such a flag unset, as bash 5 on CI and on
+     * the device does; the bash 3.2 macOS ships gives it an empty value.
+     */
+    @Test
+    fun `jshell keeps nothing from one call to the next`() {
+        val out = runJavaWrappers(
+            """set -u; jshell --execution jdi; jshell x.jsh; """ +
+                """argv "${'$'}{arg-unset}" "${'$'}{chosen-unset}""""
+        )
+
+        assertEquals(
+            listOf(
+                "$jshell<--execution><jdi>",
+                "$jshell<--execution><local><x.jsh>",
+                "<unset><unset>",
+            ),
+            out,
+            "the jshell wrapper's engine check outlived its call or failed under " +
+                "set -u, so a later jshell lost the local engine, the caller's " +
+                "variables changed, or the script stopped:\n" + envFile.readText(),
         )
     }
 

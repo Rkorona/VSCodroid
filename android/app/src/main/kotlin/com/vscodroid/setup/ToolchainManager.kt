@@ -2821,17 +2821,24 @@ class ToolchainManager(private val context: Context) {
                     }
                     if (!isElfFile(File(context.filesDir, relPath))) continue
                     if (command == "jshell") {
-                        // jshell's default engine runs snippets in a second JVM it
-                        // starts through lib/jspawnhelper, both under filesDir, so it
+                        // jshell's default engine runs snippets in a second JVM, and no
+                        // launch mechanism can exec its bin/java under filesDir, so it
                         // fails to launch; `--execution local` keeps them in jshell's
                         // own JVM. jshell refuses a repeated --execution and accepts
-                        // abbreviations of it, hence the guard. VFORK lets jline start
-                        // stty, without which Tab and ArrowUp do not work, and
-                        // user.home replaces Termux's compiled-in home, where the
-                        // preferences store cannot be written and exit stalls.
+                        // abbreviations of it, hence the guard. It reads each argument
+                        // on its own: matching " -ex" in the joined "$*" took a path
+                        // holding that for an engine choice, and missed a later
+                        // --execution under an IFS that does not start with a space.
+                        // An option value that itself starts with -ex still reads as
+                        // one; telling them apart means repeating jshell's parser.
+                        // VFORK lets jline start stty, without which Tab and ArrowUp
+                        // do not work, and user.home replaces Termux's compiled-in
+                        // home, where the preferences store cannot be written and
+                        // exit stalls.
                         lines.add(
-                            "jshell() { case \" \$* \" in *\" -ex\"*|*\" --ex\"*) ;; " +
-                                "*) set -- --execution local \"\$@\" ;; esac; " +
+                            "jshell() { local arg chosen=; for arg in \"\$@\"; do " +
+                                "case \"\$arg\" in -ex*|--ex*) chosen=1 ;; esac; done; " +
+                                "[ -n \"\$chosen\" ] || set -- --execution local \"\$@\"; " +
                                 "$systemLoader \"\$PREFIX/../$relPath\" " +
                                 "-J-Djdk.lang.Process.launchMechanism=VFORK " +
                                 "-J-Duser.home=\"\$HOME\" \"\$@\"; }"
