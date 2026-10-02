@@ -80,8 +80,8 @@ than touching the checkout.
 
 **JavaScript (hand-written `node:assert` scripts)**
 
-No test framework. Each script is plain Node, builds its own fixtures in a
-temporary directory, and is executed directly by `node`.
+No test framework. Each script is plain Node, builds its own fixtures, in a
+temporary directory where it needs files, and is executed directly by `node`.
 
 | Component | What is covered | Script |
 |-----------|-------------|---------|
@@ -104,8 +104,9 @@ JavaScript runtime` step of `lint.yml`, and again in `release.yml`, on Node 24,
 the major the APK ships (`check-build-steps.py` holds the pins there). `lint.yml`
 also runs the `--self-test` entry points of `check-workflow-steps.py`,
 `verify-android-elf.py`, `verify-server-tree.py`, `check-patch-fingerprints.py`,
-`patch-venv-home.py` and `gen-glibc-forwarders.py`, which hand each gate the
-input it exists to refuse, since no file in the tree can.
+`check-editcontext-sync.py`, `patch-venv-home.py` and `gen-glibc-forwarders.py`,
+which hand each gate the input it exists to refuse, since no file in the tree
+can.
 
 **What is enforced**: the suites themselves. A single failing test fails the job.
 No workflow reads a coverage figure, no threshold exists, and none is planned.

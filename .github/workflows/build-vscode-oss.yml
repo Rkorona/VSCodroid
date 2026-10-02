@@ -167,6 +167,15 @@ jobs:
     # A download and one release upload of a few hundred megabytes; generous,
     # because a cap that trips here costs the whole build above to retry.
     timeout-minutes: 30
+    # One publish per version at a time. Two overlapping ones could leave the
+    # notes, the asset and the tag each naming a different build, and both jobs
+    # green: the release action recovers from a clash with another writer
+    # rather than failing. Queued rather than cancelled, so whichever publish
+    # runs last writes all three. GitHub keeps one waiting job per group, and a
+    # third publish of the same version replaces one still waiting.
+    concurrency:
+      group: server-${{ needs.build.outputs.version }}
+      cancel-in-progress: false
     # The only job that writes. It builds nothing and downloads nothing beyond
     # the artifact the build job produced, so the write scope is held for the
     # seconds it is used rather than for the whole build above.
@@ -230,6 +239,12 @@ jobs:
       # came from bdcba46d. This moves it to the commit that was built. It runs
       # after the upload so that a refusal leaves the asset and the notes
       # correct, and it fails the job rather than leave the tag elsewhere.
+      #
+      # Only the remote tag moves. A clone that fetched it before keeps the
+      # old commit without a word, and `git fetch --tags` there refuses the
+      # update ("would clobber existing tag"), so the release notes are the
+      # record of what was built. A clone catches up with
+      #   git fetch --force origin 'refs/tags/server-*:refs/tags/server-*'
       - name: Point the tag at the commit that was built
         env:
           GH_TOKEN: ${{ github.token }}

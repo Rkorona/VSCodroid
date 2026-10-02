@@ -850,6 +850,7 @@ short-circuits on a tree carrying no manifest at all and reports it as stale.
 | ---- | ----------- |
 | The checker walks `patches/`, not the table | A patch added without a row fails, rather than producing a run of "ok" lines |
 | A patch may carry more than one row | 0003 has two, one per bundle: the worker itself lands in `out/server-main.js`, the `process.send` bridge in `out/bootstrap-fork.js`, and a file missing from the target's graph is exactly what a fingerprint is for |
+| A row may require its pattern more than once, by ending the bundle field in ` xN` | 0022's pre-edit-text row needs both copies: only the one after the update range carries the fix, and the text that tells it apart from the first starts with a renamed identifier, so no pattern names that copy alone |
 | A row may declare that no fingerprint is possible, and say how the patch is proven instead | 0010 is the one: it edits `build/.moduleignore`, so its proof is the kept file, which `verify-server-tree.py` requires |
 | Matching tolerates quote style and whitespace | `case"android"` and `case "android"` both count, so a new esbuild version cannot fail a row describing a correct tree |
 | The pattern must appear in what the patch itself adds | A pattern lifted from surrounding code cannot be evidence that the patch arrived |
@@ -859,6 +860,7 @@ Example rows, one per shape:
 ```
 0004 extHost worker|out/server-main.js|worker_thread Extension Host
 0011 walkthrough brand|out/nls.messages.js|Get Started with VSCodroid
+0022 editcontext pre-edit text|out/vs/code/browser/workbench/workbench.js x2|_previousEditContextText.substring(
 0010 moduleignore keep|-|edits build/.moduleignore, so its proof is the file surviving into the tree
 ```
 

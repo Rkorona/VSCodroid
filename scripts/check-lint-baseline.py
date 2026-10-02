@@ -26,7 +26,7 @@ Nothing could notice. `LintBaselineFixed`, the issue lint raises for an entry
 matching nothing, is Information severity: the same measurement left 45 entries
 unmatched and `./gradlew lint` still exited 0 with `abortOnError = true`.
 
-Four assertions, all against the committed files, none needing a lint run:
+Five assertions, all against the committed files, none needing a lint run:
 
   * the entry count equals the number the comment in build.gradle.kts states.
     One number, read from the file that states it rather than restated here, so
@@ -39,7 +39,10 @@ Four assertions, all against the committed files, none needing a lint run:
     nothing reports nothing, and CI reads the exit status, not the log;
   * the lint block still sets `abortOnError = true` and
     `warningsAsErrors = true`. Without either, a new warning lands under a green
-    lint, and a baseline entry hides nothing that could have failed.
+    lint, and a baseline entry hides nothing that could have failed;
+  * and it keeps the Play SDK Index warnings informational. Google's index
+    raises those on its own schedule, so as errors they would fail every build
+    on the day a label arrives, with nothing in any commit to blame.
 
 Both of the first two are needed, and each covers what the other misses. Only
 the count sees a regeneration performed outside the home directory, where lint
@@ -87,6 +90,18 @@ AN_ENTRY = re.compile(r"<issue\b")
 
 # What makes lint fail a build at all, errors and warnings alike.
 LINT_FLAGS = ("abortOnError = true", "warningsAsErrors = true")
+
+# The other half of warningsAsErrors: warnings no commit raises. Lint downloads
+# Google's Play SDK Index and reports a non-blocking label on a pinned version
+# as a warning under these ids (lint 32.3.1, GradleDetector), so with the flag
+# on, the index turning a label on would fail every build that day.
+SDK_INDEX_WARNINGS = (
+    "OutdatedLibrary",
+    "PlaySdkIndexDeprecated",
+    "PlaySdkIndexNonCompliant",
+    "PlaySdkIndexVulnerability",
+)
+INFORMATIONAL = re.compile(r"informational\s*\+=\s*listOf\(([^)]*)\)")
 
 HOW_TO_EDIT = (
     "Do not regenerate it: `./gradlew updateLintBaseline` rewrites the whole "
@@ -176,6 +191,21 @@ def main() -> int:
         failed = True
     else:
         print("  ok     lint fails the build on errors and warnings alike")
+
+    code_text = "\n".join(line for line in gradle_text.splitlines()
+                          if not line.strip().startswith("//"))
+    informational = set(re.findall(r'"([^"]+)"', " ".join(
+        m.group(1) for m in INFORMATIONAL.finditer(code_text))))
+    raised = [i for i in SDK_INDEX_WARNINGS if i not in informational]
+    if raised:
+        print(f"  FAIL   build.gradle.kts no longer lists {', '.join(raised)} "
+              f"as informational")
+        print("         Google's SDK Index raises those, not a commit, and "
+              "warningsAsErrors would turn every build red the day it does.")
+        failed = True
+    else:
+        print("  ok     the SDK Index warnings no commit raises stay "
+              "informational")
 
     located = [(issue.get("id"), loc.get("file"))
                for issue in entries

@@ -427,10 +427,24 @@ android {
         // runs on Play's calendar while targetSdk is held at 36 for the local
         // network reason in defaultConfig; that deadline is a decision to take
         // from the report, not a failed build.
+        //
+        // The four Play SDK Index ids are the same case. Lint fetches Google's
+        // index, cached for a week, and reports a non-blocking label on a pinned
+        // version, such as the asset-delivery 2.2.2 this build keeps on purpose,
+        // as a warning. Listing an id sets its severity whatever the label, and
+        // lint has no override that tells the two apart, so a BLOCKING label on
+        // these is informational here too. Its message still opens "[Prevents
+        // app release in Google Play Console]", and Play Console refuses that
+        // upload. RiskyLibrary is reported only for a blocking critical issue
+        // and stays an error.
         informational += listOf(
             "GradleDependency",
             "AndroidGradlePluginVersion",
             "ExpiringTargetSdkVersion",
+            "OutdatedLibrary",
+            "PlaySdkIndexDeprecated",
+            "PlaySdkIndexNonCompliant",
+            "PlaySdkIndexVulnerability",
         )
         baseline = file("lint-baseline.xml")
     }
@@ -741,9 +755,10 @@ fun Exec.failOnExit(help: String) {
 // predated patch 0012, so its /callback route answered 403 and every OAuth
 // sign-in hung, with every gate in the project green.
 //
-// It reads the six bundles named in patches/fingerprints.txt, not the 700 MB
-// tree around them: 0.11s, no network, nothing resolved. Cheap enough that
-// declaring Gradle inputs would cost the same hashing it would save.
+// It reads the eight bundles named in patches/fingerprints.txt, not the
+// 436 MiB tree around them (1.139.1): 0.14 s, no network, nothing resolved.
+// Cheap enough that declaring Gradle inputs would cost the same hashing it
+// would save.
 val checkPatchFingerprints = tasks.register<Exec>("checkPatchFingerprints") {
     group = "verification"
     description = "Checks the server tree in assets/ carries every patch in patches/."

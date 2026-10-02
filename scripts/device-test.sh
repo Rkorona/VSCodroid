@@ -1303,15 +1303,16 @@ printf "\n${BOLD}Phase 6: Toolchains${RESET}\n"
 #   * It can read what an install left behind -- the record, the generated
 #     environment, and whether the payload those name is still on disk -- and it
 #     can ask whether the screen that installs one is reachable at all.
-#   * It cannot run a toolchain. `go`, `ruby` and `java` are bash *functions*
-#     defined in toolchain-env.sh, which only an interactive shell has sourced,
-#     and `run-as` is a different SELinux domain (runas_app, not untrusted_app)
-#     that may execute files the app itself is refused. A version string
-#     obtained through it would be evidence about run-as. Checklist rows TC-4
-#     and TC-5 stay a person's job.
+#   * It cannot run a toolchain. `ruby` and `java` are bash *functions* from
+#     toolchain-env.sh, which `.bashrc` and the BASH_ENV file source, and
+#     trampoline links in usr/libexec/tcbin for every other caller, and `run-as`
+#     is a different SELinux domain (runas_app, not untrusted_app) that may
+#     execute files the app itself is refused. A version string obtained
+#     through it would be evidence about run-as. Checklist rows TC-4 and TC-9
+#     stay a person's job.
 #   * It cannot drive an install. ToolchainActivity is not exported, so `am
-#     start` from the shell uid is refused, and the first-run picker is shown
-#     once per install.
+#     start` from the shell uid is refused, and the first-run picker is offered
+#     only until it is answered, which dismiss_blocking_dialogs does with Skip.
 #
 # Consequence for a default run: `pm clear` empties filesDir, so nothing is
 # installed and the installed-state checks report SKIP with that reason. To make

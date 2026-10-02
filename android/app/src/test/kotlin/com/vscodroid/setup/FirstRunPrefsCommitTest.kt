@@ -7,15 +7,16 @@ import java.io.File
 /**
  * Every preference write in FirstRunSetup commits.
  *
- * The class suppresses the ApplySharedPref lint on the statement that every
- * write there uses `commit()` on purpose: each records a step of a run a kill
- * can interrupt at any moment, and `apply()`'s flush window is the interval
- * those records exist to survive. Two writes had drifted to the KTX default,
- * which is `apply()`: the retired-extension sweep record, written right after
- * the delete it stands for, and the bundled-id record the next upgrade reads
- * to tell an uninstall from a first bundling. A reader trusting the header
- * reasoned about the manifest and record pairing on a guarantee two of the
- * keys did not have.
+ * The class header states that every write there uses `commit()` on purpose:
+ * each records a step of a run a kill can interrupt at any moment, and
+ * `apply()`'s flush window is the interval those records exist to survive.
+ * Lint cannot hold it to that, since ApplySharedPref sees a call to
+ * `Editor.commit()` and not the KTX `edit(commit = true)`, so this test does.
+ * Two writes had drifted to the KTX default, which is `apply()`: the
+ * retired-extension sweep record, written right after the delete it stands
+ * for, and the bundled-id record the next upgrade reads to tell an uninstall
+ * from a first bundling. A reader trusting the header reasoned about the
+ * manifest and record pairing on a guarantee two of the keys did not have.
  *
  * Source reading, over the statements rather than the lines: the KTX form
  * carries its choice as an argument on the opening call, so a scan for

@@ -26,7 +26,8 @@
 #   scripts/check-patches-apply.sh              # newest stable upstream tag
 #   scripts/check-patches-apply.sh 1.134.0      # a specific tag
 #
-# Exit codes: 0 all applied, 1 a patch failed, 2 the check could not run.
+# Exit codes: 0 all applied, 1 a patch failed or 0022's premise is gone
+# (check-editcontext-sync.py), 2 the check could not run.
 
 set -euo pipefail
 
@@ -92,6 +93,14 @@ git -C "$SRC" checkout -q FETCH_HEAD || fail "could not check out $TAG"
 head=$(git -C "$SRC" rev-parse --short HEAD) || fail "could not resolve the fetched commit"
 echo "  HEAD    : $head"
 
+# Applying is not the whole question for 0022: it applies to 1.140.0, where the
+# synchronous update its copy depends on is deferred. Asked of upstream's source
+# before any patch, so a patch that stops applying first cannot hide it.
+echo
+premise=0
+python3 "$SCRIPT_DIR/check-editcontext-sync.py" "$SRC" || premise=$?
+[ "$premise" -le 1 ] || fail "check-editcontext-sync.py could not run (exit $premise)"
+
 echo
 echo "Applying"
 applied=0
@@ -110,9 +119,16 @@ for patch in "$PATCHES"/*.patch; do
         echo "This is not a broken build. The pinned tree at $PINNED is unaffected and"
         echo "still builds. What it says is that bumping to $TAG needs $name rebased"
         echo "first, and it is cheaper to learn that now than during the bump."
+        if [ "$premise" -ne 0 ]; then
+            echo "0022 does not hold on $TAG either; see the start of this report."
+        fi
         exit 1
     fi
 done
 
 echo
 echo "All $applied patches apply cleanly to $TAG."
+if [ "$premise" -ne 0 ]; then
+    echo "They apply, but 0022 does not hold on $TAG; see the start of this report."
+fi
+exit "$premise"

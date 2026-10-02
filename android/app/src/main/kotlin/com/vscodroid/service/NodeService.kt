@@ -1065,12 +1065,11 @@ class NodeService : Service() {
      * will ignore the value and they need to know why the editor's behaviour just
      * changed under them.
      */
-    // ApplySharedPref: lint's advice here is the defect. Following it turns the
-    // latch off silently, and the warning sits on the one line in this file where
-    // apply() must not be used, which is exactly how a future reader tidying
-    // warnings would break it. `the count is committed rather than deferred` is the
-    // guard; this annotation is so the guard is never reached in the first place.
-    @Suppress("ApplySharedPref")
+    // Lint does not hold the commit below. ApplySharedPref flags a call to
+    // `Editor.commit()`, not the KTX `edit(commit = true)` written here, so
+    // lint says nothing if it becomes apply(), which turns the latch off
+    // silently.
+    // `the count is committed rather than deferred` is the guard.
     private suspend fun chargeHeapOverride(exitCode: Int) {
         if (!processManager.heapOverrideInEffect()) return
         // Both touches of the preference file hop to IO; the decision between them

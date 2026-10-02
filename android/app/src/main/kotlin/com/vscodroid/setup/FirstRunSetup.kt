@@ -31,23 +31,25 @@ import android.annotation.SuppressLint
  *   `app/build.gradle.kts`, and both are parameters rather than direct reads of
  *   `BuildConfig` so that the storage pre-flight can be exercised against a tree
  *   of known size. A unit test compiles against whatever `src/main/assets` holds
- *   on the machine running it: the whole 810 MiB on a developer's checkout, and
- *   empty directories on the CI runner, which stubs them
- *   (`.github/workflows/build.yml`, "Create minimal asset stubs"). With an empty
- *   tree every branch of the pre-flight computes the same number, so a test that
- *   did not supply its own figures would pass there while distinguishing nothing.
+ *   on the machine running it: the whole tree on a developer's checkout (575 MiB
+ *   counted at the 1.139.1 pin), and empty directories on the CI runner, which
+ *   stubs them (`.github/workflows/build.yml`, "Create minimal asset stubs").
+ *   With an empty tree every branch of the pre-flight computes the same number,
+ *   so a test that did not supply its own figures would pass there while
+ *   distinguishing nothing.
  */
-// ApplySharedPref: every write here uses commit() on purpose. What each one
-// records is a step of a run that a kill can interrupt at any moment, and the
-// heap-override latch records a SIGKILL of this very process; apply()'s flush
-// window is exactly the interval those writes exist to survive.
+// Every preference write here commits on purpose. What each one records is a
+// step of a run that a kill can interrupt at any moment, and apply()'s flush
+// window is exactly the interval those writes exist to survive. Lint does not
+// hold that line: ApplySharedPref flags a call to `Editor.commit()`, not the
+// KTX `edit(commit = true)` each write uses. FirstRunPrefsCommitTest does.
 //
 // UsableSpace: the pre-flight deliberately asks what is free rather than what
 // the platform would let this app allocate. getAllocatableBytes counts space it
 // would clear by evicting other apps' caches, which is a promise about a device
 // state, not about this one, and the figure the user is shown has to be the one
 // the extraction will actually meet.
-@SuppressLint("ApplySharedPref", "UsableSpace")
+@SuppressLint("UsableSpace")
 class FirstRunSetup(
     private val context: Context,
     private val assetBytes: Long = BuildConfig.EXTRACTED_ASSET_BYTES,
@@ -3823,9 +3825,11 @@ claude() {
         // good. Ahead of the pre-flight they are measured as free space rather
         // than credited as tree already unpacked.
         pruneUnshippedServerEntries("vscode-reh/node_modules/@github")
-        // The same for @microsoft/mxc-sdk's bin/: about 29 MB of Windows, macOS
-        // and glibc helpers nothing on Android can start, which server trees
-        // built before build-vscode-oss.sh pruned them left on the device.
+        // The same for @microsoft/mxc-sdk's bin/: Windows, macOS and glibc
+        // helpers nothing on Android can start, which server trees built before
+        // build-vscode-oss.sh pruned them left on the device. About 19 MB in the
+        // 1.133.0 tree that v1.1.0 to v1.4.0 shipped; the unreleased 1.138 and
+        // 1.139 builds carried about 29 MB.
         pruneUnshippedServerEntries("vscode-reh/node_modules/@microsoft/mxc-sdk")
         // And @vscode/sandbox-runtime's vendor/seccomp, whose only content was an
         // x86-64 apply-seccomp; the APK now ships vendor/seccomp-src alone.
@@ -5394,7 +5398,7 @@ private fun releaseWriteLock(path: String, lock: DestinationLock) = synchronized
  * pre-flight passes are believed to different degrees, which is [sharedTreeCredit]'s
  * job rather than this one's:
  *
- *  - `server/` is measured and believed. It is most of the tree (464 of 604 MiB
+ *  - `server/` is measured and believed. It is most of the tree (436 of 575 MiB
  *    at 1.139.1) and near enough every byte counted there is a byte the next
  *    unpack writes over. Near enough rather than all: `setupCopilotAndroidAliases`
  *    writes an alias `package.json` beside the packages it aliases, `server.js`
@@ -5406,7 +5410,7 @@ private fun releaseWriteLock(path: String, lock: DestinationLock) = synchronized
  *    MiB and the slack absorbs them many times over, so they are left rather
  *    than filtered. A repair that ever writes something substantial there would
  *    have to be.
- *  - `usr/` is shared ground. Toolchains install into it, Java is 146 MB
+ *  - `usr/` is shared ground. Toolchains install into it, Java is 155 MB
  *    unpacked, and `npm install -g` lands there too, so its size on disk is not
  *    an answer to "how much of what we are about to write is already here".
  *    Only the entries the APK names are measured, see

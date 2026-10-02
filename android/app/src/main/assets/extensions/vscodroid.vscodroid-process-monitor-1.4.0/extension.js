@@ -185,8 +185,8 @@ function updateStatusBar(snapshot) {
     // once, latched by the flags below, and VS Code gives no way to edit one
     // that is already open. So the two disagreed on screen -- measured on an
     // API 35 emulator, the toast read 8 while the bar read 7, and the toast was
-    // simply older. The target of 5 stays because it is a constant, not a
-    // reading.
+    // simply older. The target stays because it is a constant of the app, the
+    // idle baseline the snapshot carries, not a reading.
     //
     // Nothing actionable is lost. The button opens the details view, which
     // reads lastSnapshot, refreshed by poll() every interval, so it shows the
@@ -247,12 +247,13 @@ function updateStatusBar(snapshot) {
         // which is the app doing nothing. `<=` and not `<` for that one: the
         // baseline is the floor, not a count to get below.
         //
-        // The two are separate on purpose. A recovery to 6 or 7 has left the
-        // busy range and deserves the error again if the count climbs back past
-        // 14, but it is still above the target the warning names, so repeating
-        // the warning there says nothing new. An escalation is not affected
-        // either way: a latched warning does not block the critical arm, which
-        // tests its own flag.
+        // The two are separate on purpose. A recovery to under the soft budget
+        // but above the idle baseline has left the busy range and deserves the
+        // error again if the count climbs back to the error budget, but it is
+        // still above the target the warning names, so repeating the warning
+        // there says nothing new. An escalation is not affected either way: a
+        // latched warning does not block the critical arm, which tests its own
+        // flag.
         criticalShownAtThreshold = false;
         if (total <= idle) warningShownAtThreshold = false;
     }

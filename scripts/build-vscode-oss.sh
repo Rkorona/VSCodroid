@@ -272,6 +272,8 @@ if [ -d "$PATCHES" ] && [ -n "$(ls -A "$PATCHES"/*.patch 2>/dev/null)" ]; then
         git -C "$SRC" apply --verbose "$patch" 2>&1 | sed 's/^/  /'
         echo "  applied $(basename "$patch")"
     done
+    # A premise of 0022 that applying it cannot see: see the checker's header.
+    python3 "$SCRIPT_DIR/check-editcontext-sync.py" "$SRC"
 elif [ -n "${ALLOW_UNADAPTED:-}" ]; then
     echo "  no patches at $PATCHES, building unadapted (ALLOW_UNADAPTED set)"
 else

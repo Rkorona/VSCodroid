@@ -106,6 +106,10 @@ function notificationFor(snapshot) {
  * literal the extension falls back to, which is the thing the block at the
  * bottom of this file exists to catch.
  *
+ * The default is not process-monitor.js's own budget, on purpose: every count
+ * below is written against this one, and the blocks that pass a moved budget
+ * are what show the tiers follow whatever the snapshot carries.
+ *
  * Stamped with the current time, because the extension now refuses to act on a
  * snapshot older than a few poll intervals. A fixture frozen at zero is a
  * snapshot from 1970 and would exercise that refusal in every check here.
@@ -574,8 +578,9 @@ function snapshot(total, terminals, langservers, budget = { idle: 5, soft: 8, er
 // the host starts again.
 //
 // NEGATIVE CONTROL: drop `&& !chat.includes(p)` in showProcessTree() and the
-// second assertion goes red; offer a second button while an agent host runs and
-// the first does; print advice naming chat again and the third does.
+// second assertion goes red; offer a second button on either tier while an
+// agent host runs and the first does; print advice naming chat again and the
+// third does.
 {
     const tree = [
         { pid: 5001, ppid: 1, type: 'server', cmd: 'libnode.so server-main.js' },
@@ -584,13 +589,18 @@ function snapshot(total, terminals, langservers, budget = { idle: 5, soft: 8, er
         { pid: 5004, ppid: 5001, type: 'langserver', cmd: 'libnode.so eslintServer.js' },
         { pid: 5005, ppid: 5001, type: 'langserver', cmd: 'libnode.so jsonServerMain' },
     ];
-    const snap = { timestamp: Date.now(), total: 20, budget: { current: 20, idle: 5, soft: 8, error: 14, hard: 32 }, tree };
+    const snapAt = (total) => ({ timestamp: Date.now(), total, budget: { current: total, idle: 5, soft: 8, error: 14, hard: 32 }, tree });
 
-    const raised = notificationFor(snap);
-    assert.deepStrictEqual(
-        raised[0] && raised[0].items, ['Show Details'],
-        `with an agent host running the notification offers ${JSON.stringify(raised)}`,
-    );
+    // Both tiers, because each is its own call: with only the error tier driven,
+    // a button added to the warning alone passed. The error tier last, so the
+    // details view below reads the same snapshot it always has.
+    for (const [total, level] of [[10, 'warning'], [20, 'error']]) {
+        const raised = notificationFor(snapAt(total));
+        assert.deepStrictEqual(
+            raised.map((n) => [n.level, n.items]), [[level, ['Show Details']]],
+            `with an agent host running at ${total} the notification offers ${JSON.stringify(raised)}`,
+        );
+    }
 
     commands.get('vscodroid.showProcesses')();
     const advice = printed.join('\n');

@@ -180,7 +180,7 @@ flowchart TD
 | Architecture | arm64-v8a                          |
 | WebView      | Chrome 105+                        |
 | RAM          | 4 GB recommended                   |
-| Storage      | ~768 MB free to install            |
+| Storage      | ~738 MB free to install            |
 
 ## 🚀 Getting Started
 
@@ -240,9 +240,9 @@ adb install android/app/build/outputs/apk/debug/app-debug.apk
 | -------------------------------------- | -------------------- |
 | Play Store download (core)             | ~270 MB              |
 | + Each toolchain (on-demand)           | 10-57 MB per language |
-| Free space required to install         | ~768 MB              |
-| Extracted to internal storage (core)   | ~633 MB              |
-| Extracted, plus both toolchains        | ~830 MB              |
+| Free space required to install         | ~738 MB              |
+| Extracted to internal storage (core)   | ~603 MB              |
+| Extracted, plus both toolchains        | ~800 MB              |
 | RAM usage (typical)                    | ~400-700 MB          |
 
 The install figure is larger than what the app ends up occupying because extraction

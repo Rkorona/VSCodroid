@@ -1681,10 +1681,10 @@ class ProcessManager(private val context: Context) {
      * record has to survive is a SIGKILL of this app's process, and `apply()`'s
      * deferred write can lose that race.
      */
-    // ApplySharedPref: deliberate, for the reason the KDoc gives. What this record
-    // has to survive is a SIGKILL of this app's process, which is the one case
-    // apply()'s deferred write does not.
-    @Suppress("ApplySharedPref")
+    // Lint does not hold the commit the KDoc asks for. ApplySharedPref flags a
+    // call to `Editor.commit()`, not the KTX `edit(commit = true)` written here;
+    // `the count is committed rather than deferred` guards this writer and
+    // NodeService's.
     private fun requestedHeapCeiling(totalRamMb: Long, isLowRam: Boolean): Int? = try {
         // Answered here because this is where the suspension is actually decided,
         // and re-answered on every start so that it cannot go stale: a user who

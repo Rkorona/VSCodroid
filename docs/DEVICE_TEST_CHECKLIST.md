@@ -69,6 +69,7 @@
 | KB-29 | A drag past the edge of a text box | In the rename box with the caret at the end, drag right 4; with it at the start, drag left 4; with it in the middle, latch Alt and drag left 2, then latch Alt again and drag up 2. Repeat in the Command Palette and the find widget. Run `adb shell dumpsys input_method \| grep -E 'mServedView\|mInputShown'` after each | The box stays open and focused, the keyboard and the key row stay up, and the Explorer still shows the old name. `mServedView` names `android.webkit.WebView` and `mInputShown` is true. In a Simple Browser input (KB-28), which nothing guards, drag right past the end and record where focus goes | | |
 | KB-30 | Gboard Enter accepts in the Command Palette, Quick Open and an input box such as VSCodroid: Open in Browser | With Gboard, and nothing underlined when Enter is pressed (end the word with a space or a period): in the Command Palette type `about ` and press Gboard's Enter; in Quick Open type part of a file name and a period and press Enter; run **VSCodroid: Open in Browser**, type `abc ` and press Enter. Then latch Ctrl on the key row and repeat the Command Palette case, and in the Explorer create a file with New File the same way. Record the API level and the Gboard version | Help: About opens once, the file opens and Quick Open closes, and the Open in Browser box closes with a message that no app could open the address. With Ctrl latched, About still opens once and Ctrl clears. New File creates exactly one file. Before the fix each of the first three stayed open with nothing run, because Gboard's Enter in a one-line box reached the page with an empty `code` | | |
 | KB-31 | A caret move while a word is composing | With a keyboard that composes, so typed letters show underlined (Gboard 12.4, the API 33 emulator's preload), type a word in a file and, while it is still underlined, press End on the key row, then type one letter. Repeat with a fresh word for a trackpad drag left out of the word, Tab accepting a suggestion, a tap on another line, and a long press on another word. Then open a `.js` file holding `const alpha1 = 1, alpha2 = 2, alpha3 = 3;` and, on an empty line, type `alp`, a space and Backspace, so that `alp` is underlined again under an open suggestion list on `alpha1`; drag the trackpad down 2, press Tab on the key row and type one letter. Repeat with a fresh `alp`, tapping the `alpha2` row instead of the drags and Tab. Record the API level and the Gboard version, and whether the word was underlined when each action began | Each time the text stays intact: the underlined word is kept as typed, or replaced once by the suggestion Tab or the tap accepted, the caret goes where the key or the tap put it, and the letter lands at the caret. The long press still opens the menu with the keyboard up. In the `.js` file the drags move the list's highlight to `alpha3` and Tab inserts it, and the tap inserts `alpha2`. The list may then open again with the accepted word as its only row; that is expected. Before the fix the keyboard's next edit landed where the underlined word had been: End while `kiwi` was underlined in `alpha delta kiwi charlie` left `alpha delta charlie charlie`, a tap on an empty line followed by `cha` typed `cchcha`, and Tab after the two drags, then `x`, left `alpha3xha3ha3` | | |
+| KB-32 | A keyboard suggestion after the caret moves | With a keyboard that does not compose, so typed letters show no underline (Gboard 18, the API 36 emulator's preload), in a new plain-text file: type `kiwi`, tap between `ki` and `wi`, and tap `kiwi` in the suggestion strip. On a new line type `alpha beta charlie delta`, tap between `cha` and `rlie`, and tap `Charlie`. On a new line type `find me here`, tap after `find`, then past the end of the line, and tap the strip's first suggestion. Record the API level and the Gboard version. Over remote debugging, `document.querySelector('.native-edit-context').editContext.text` can be read after each step | The strip never offers a run the file does not hold, such as `kiwiiwik` or `hereereh`. The lines end as `kiwi ` and `alpha beta Charlie delta`, and the third keeps `find me ` and ends in `here` or the word tapped in its place. `editContext.text` equals the line under the caret after every step. Before the fix the three lines became `wiiwik `, `alpha beta charlCharlie ` and `find meereh `: the keyboard's hidden buffer kept a reversed copy of every typed letter after the line, and a selection-only update moved the caret past the keyboard's selection | | |
 
 ## 4. Screen & Orientation
 
@@ -154,7 +155,7 @@ fresh.
 
 | ID | Metric | Steps | Target | Actual | Pass/Fail | Notes |
 |----|--------|-------|--------|--------|-----------|-------|
-| PF-1 | Cold start (first run) | Time from tap to editor visible. Record the number rather than pass/fail: no target has ever been measured, and extraction unpacks about 604 MiB across over 23,000 files one at a time | Progress advances throughout and the editor opens; write the elapsed time in Notes | | | |
+| PF-1 | Cold start (first run) | Time from tap to editor visible. Record the number rather than pass/fail: no target has ever been measured, and extraction unpacks about 575 MiB across over 23,000 files one at a time | Progress advances throughout and the editor opens; write the elapsed time in Notes | | | |
 | PF-2 | Cold start (subsequent) | Kill app, re-launch, time to editor | <5s | | | |
 | PF-3 | Warm start | Home → return to app | <2s | | | |
 | PF-4 | Memory (idle) | Open app, check `dumpsys meminfo` | <400MB | | | |
@@ -270,7 +271,7 @@ first launch of a build that has this line, so the row to run instead is TC-8.
 |----------|-------|------|------|------|
 | Device Matrix | 4 | | | |
 | Android Versions | 4 | | | |
-| Keyboard Input | 31 | | | |
+| Keyboard Input | 32 | | | |
 | Screen & Orientation | 10 | | | |
 | Editor Operations | 14 | | | |
 | Extensions | 7 | | | |
@@ -281,7 +282,7 @@ first launch of a build that has this line, so the row to run instead is TC-8.
 | Terminal & Tools | 13 | | | |
 | SAF & Files | 17 | | | |
 | Display Language | 6 | | | |
-| **Total** | **136** | | | |
+| **Total** | **137** | | | |
 
 **Overall Result**: [ ] PASS / [ ] FAIL
 

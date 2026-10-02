@@ -241,7 +241,7 @@ def check(ok, label, detail=""):
 
 
 def read_table(TABLE):
-    """{id: [(label, bundle, pattern), ...]}; bundle '-' means an explicit exemption.
+    """{id: [(label, bundle, pattern, times), ...]}; bundle '-' is an exemption.
 
     A list per id, not one row per id. A patch that lands in two separately
     bundled entry points needs a claim about each, and 0003 is one: it bridges
@@ -249,6 +249,16 @@ def read_table(TABLE):
     out/bootstrap-fork.js, and adds workerAsChildProcess.ts, which is pulled into
     out/server-main.js. One row can only name one of them. Keying a dict by id
     also meant a second row for the same patch silently replaced the first.
+
+    `times` is how often the pattern has to occur, 1 unless the bundle field
+    ends in ` xN`. It exists for a patch that writes the same text twice with
+    only one copy carrying the fix: 0022 copies the text either side of an
+    update range from one field, the copy after the range is the one that
+    matters, and the text that tells it apart from the first starts with an
+    identifier the minifier renames, so no pattern names that copy alone. A row
+    satisfied by one match stayed green with that copy reverted. The suffix
+    goes on the bundle because the label is free text and the pattern, last on
+    the line, may itself contain `|`.
     """
     rows = {}
     for lineno, raw in enumerate(TABLE.read_text().splitlines(), 1):
@@ -258,12 +268,15 @@ def read_table(TABLE):
         head, _, rest = line.partition("|")
         bundle, _, pattern = rest.partition("|")
         ident = head.split(None, 1)[0] if head.split() else ""
-        if not re.fullmatch(r"\d{4}", ident) or not bundle or not pattern:
+        where = re.fullmatch(r"(\S+)(?: x([1-9]\d*))?", bundle)
+        if (not re.fullmatch(r"\d{4}", ident) or not where or not pattern
+                or (where.group(1) == "-" and where.group(2))):
             print(f"  FAIL   {TABLE.name}:{lineno} is not "
-                  f"'NNNN label|bundle|pattern': {line}")
+                  f"'NNNN label|bundle|pattern' or 'NNNN label|bundle xN|pattern': {line}")
             return None
         rows.setdefault(ident, []).append(
-            (head.split(None, 1)[1] if " " in head else "", bundle, pattern))
+            (head.split(None, 1)[1] if " " in head else "", where.group(1), pattern,
+             int(where.group(2) or 1)))
     return rows
 
 
@@ -346,7 +359,7 @@ def main(tree, patches_dir):
             check(False, f"{name} has no line in {TABLE.name}",
                   "add its fingerprint, or a line saying how it is proven instead")
             continue
-        for label, bundle, pattern in rows[ident]:
+        for label, bundle, pattern, times in rows[ident]:
             if bundle == "-":
                 # Not a pass by omission: the line states the reason, and it had to
                 # be written for the patch to get here at all.
@@ -361,9 +374,13 @@ def main(tree, patches_dir):
             if not target.is_file():
                 check(False, f"{ident} {label}: {bundle} is not in the tree")
             else:
-                check(tolerant(pattern).search(target.read_text(errors="ignore")) is not None,
-                      f"{ident} {label} reached {pathlib.Path(bundle).name}",
-                      f"{bundle} does not contain {pattern!r}")
+                found = len(tolerant(pattern).findall(target.read_text(errors="ignore")))
+                check(found >= times,
+                      f"{ident} {label} reached {pathlib.Path(bundle).name}"
+                      + (f" {times} times" if times > 1 else ""),
+                      f"{bundle} does not contain {pattern!r}" if not found else
+                      f"{bundle} contains {pattern!r} {found} times, and the row "
+                      f"needs {times}")
 
     # A row naming a patch that no longer exists is stale rather than harmless:
     # it is the only remaining place someone would look to learn the patch is
@@ -427,6 +444,34 @@ def self_test():
             return 1
         print("  ok     self-test: a pattern that appears only in a patch's prose "
               "header does not count as introduced, and one in its diff does")
+
+        # A row asking for two matches, against a bundle carrying the pattern
+        # once and then twice. The second is the negative control: a count that
+        # refused every counted row would pass the first alone.
+        counted = pathlib.Path(tmp) / "counted"
+        counted_tree = pathlib.Path(tmp) / "counted-tree"
+        counted.mkdir()
+        counted_tree.mkdir()
+        (counted / "0001-counted.patch").write_text(
+            "diff --git a/self-test b/self-test\n"
+            "--- a/self-test\n+++ b/self-test\n"
+            "@@ -1 +1,2 @@\n-nothing\n+counted-twice\n+counted-twice\n"
+        )
+        (counted / "fingerprints.txt").write_text("0001 counted|bundle.js x2|counted-twice\n")
+        for copies in (1, 2):
+            (counted_tree / "bundle.js").write_text("counted-twice;" * copies)
+            out = io.StringIO()
+            failed = False
+            with contextlib.redirect_stdout(out):
+                write_manifest(counted_tree, counted)
+                rc = main(counted_tree, counted)
+            if (rc == 0) != (copies == 2):
+                print(f"  FAIL   self-test: a row needing two matches gave rc={rc} "
+                      f"against a bundle holding {copies}:\n{out.getvalue()}")
+                return 1
+        failed = False
+        print("  ok     self-test: a row needing its pattern twice is refused with "
+              "one match and accepted with two")
 
         for stray in strays + (None,):
             src = pathlib.Path(tmp) / ("stray" if stray else "clean")

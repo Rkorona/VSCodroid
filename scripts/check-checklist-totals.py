@@ -23,11 +23,11 @@ The second is not implied by the first. A total maintained separately can be
 right about a set of section counts that are themselves wrong, and was.
 
 The third exists because row IDs outlive their rows: scripts/device-test.sh
-still cites TC-5, which was removed with the Go toolchain. The release plan
-sends a person through named rows with the minified build before every tag, so
-a cited row that is gone is a step nobody can follow, and a plan citing none
-has lost the step. Its refusals never fire on a clean tree, so every run first
-hands them the input they exist to refuse.
+went on citing TC-5 for weeks after it was removed with the Go toolchain. The
+release plan sends a person through named rows with the minified build before
+every tag, so a cited row that is gone is a step nobody can follow, and a plan
+citing none has lost the step. Its refusals never fire on a clean tree, so
+every run first hands them the input they exist to refuse.
 
 Rows are recognised by their identifier: a leading `| XX-N |` cell, which is the
 shape every row in the document uses and no header or prose does.
@@ -47,22 +47,31 @@ ROW = re.compile(r"^\|\s*([A-Z]{2,3}-\d+)\s*\|")
 # `| Background/Foreground | 7 | | | |` and the bolded total line.
 SUMMARY_ROW = re.compile(r"^\|\s*([A-Za-z][A-Za-z &/]*?)\s*\|\s*(\d+)\s*\|")
 TOTAL_ROW = re.compile(r"^\|\s*\*\*Total\*\*\s*\|\s*\*\*(\d+)\*\*\s*\|")
+# A row ID wherever the plan writes one, whatever prefixes the checklist still
+# has. Taking the prefixes from the checklist made a citation whose whole
+# section had gone invisible: with no TC row left, TC-2 was not an ID at all,
+# and the plan could send a person to it with this check green. Families of
+# the same shape that name something else are let through by name, and the
+# tail of a longer ID such as FR-DEV-06 is not read as one.
+CITED = re.compile(r"(?<![A-Z]-)\b([A-Z]{2,3})-\d+\b")
+NOT_ROWS = {"SHA", "UTF", "GPL", "BSD"}
 
 
 def citation_problems(ids, plan_text):
     """The row IDs `plan_text` cites, and what is wrong with them given `ids`."""
-    # Prefixes come from the checklist, so there is no hand list to drift and
-    # UTF-8 or SHA-256 cannot match. IDs are read whole: a cited SF-16 must
-    # never pass as the row SF-1.
-    prefixes = "|".join(sorted({i.split("-")[0] for i in ids}))
-    cited = set(re.findall(rf"\b(?:{prefixes})-\d+\b", plan_text))
+    # IDs are read whole: a cited SF-16 must never pass as the row SF-1.
+    cited = {m.group(0) for m in CITED.finditer(plan_text)
+             if m.group(1) not in NOT_ROWS}
     if not cited:
         return cited, [
             "  the release plan cites no checklist row, so its pre-tag device "
             "step is gone"
         ]
+    prefixes = {i.split("-")[0] for i in ids}
     return cited, [
         f"  {PLAN.name} cites {rid}, which is not a row here"
+        + ("" if rid.split("-")[0] in prefixes
+           else f", and no {rid.split('-')[0]} row is left at all")
         for rid in sorted(cited - ids)
     ]
 
@@ -76,6 +85,14 @@ def main():
         sys.exit("FAIL self-check: a plan citing no row was accepted")
     if citation_problems({"SF-1", "SF-16"}, "SF-1 and SF-16")[1]:
         sys.exit("FAIL self-check: a plan citing only existing rows was refused")
+    if not any("TC-2" in p for p in citation_problems({"SF-1"}, "SF-1 and TC-2")[1]):
+        sys.exit("FAIL self-check: a cited TC-2 passed once no TC row was left")
+    if citation_problems({"SF-1"}, "SF-1, SHA-256 and UTF-8")[1]:
+        sys.exit("FAIL self-check: SHA-256 or UTF-8 was read as a row ID")
+    if not any("SF-3" in p for p in citation_problems({"SF-1"}, "SF-1-SF-3")[1]):
+        sys.exit("FAIL self-check: the far end of a range SF-1-SF-3 was not read")
+    if citation_problems({"SF-1"}, "SF-1, FR-DEV-06, GPL-2 and BSD-3")[1]:
+        sys.exit("FAIL self-check: FR-DEV-06, GPL-2 or BSD-3 was read as a row ID")
 
     if not CHECKLIST.is_file():
         sys.exit(f"FAIL {CHECKLIST} is missing; this check would otherwise look at nothing")
